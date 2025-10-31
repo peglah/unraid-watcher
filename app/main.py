@@ -102,8 +102,15 @@ def main_loop(feed_url, state_path, apprise_cfg, poll_seconds, simulate=False):
                         last_id,
                         delay_days=float(os.environ.get("REMINDER_DELAY_DAYS", "30"))
                     ):
-                    title = "Unraid update reminder: 30 days since last stable release"
-                    body = f"It's been 30 days since the last stable Unraid release ({last_pub_iso}). Consider planning your OS update.\n\nLink: {latest.get('link')}"
+                    delay_days = float(os.environ.get("REMINDER_DELAY_DAYS", "30"))
+
+                    title = f"Unraid update reminder: {delay_days:g} day{'s' if delay_days != 1 else ''} since last stable release"
+                    body = (
+                        f"It's been {delay_days:g} day{'s' if delay_days != 1 else ''} since the last "
+                        f"stable Unraid release ({last_pub_iso}). Consider planning your OS update.\n\n"
+                        f"Link: {latest.get('link')}"
+                    )
+
                     send_apprise_notification(apprise_cfg, title, body)
                     state.set_reminder_sent(last_id)
                     logger.info("30-day reminder sent for release %s", last_id)
