@@ -1,0 +1,27 @@
+services:
+  unraid-watcher:
+    image: ghcr.io/peglah/unraid-watcher:latest
+    container_name: unraid-watcher
+    restart: unless-stopped
+
+    environment:
+      FEED_URL: "https://forums.unraid.net/forums/forum/7-announcements.xml"
+      APPRISE_URLS: "mailto://you@example.org"
+      POLL: "1h"
+      REMINDER_DELAY_DAYS: "30"
+      STATE_FILE: "/data/state.json"
+      SIMULATE: "false"
+
+    volumes:
+      - /mnt/user/appdata/unraid-watcher:/data
+
+    ports:
+      # Optional: expose the /health endpoint
+      - "8000:8000"
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 1m
+      timeout: 5s
+      retries: 3
+      start_period: 10s

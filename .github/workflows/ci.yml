@@ -1,0 +1,25 @@
+name: CI
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+      - run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+      - run: flake8 app tests
+      - run: pytest -q
+      - uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: false
+          tags: unraid-watcher:ci
