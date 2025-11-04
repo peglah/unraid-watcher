@@ -1,5 +1,6 @@
 from app.state import State
 
+
 def test_state_save_load(tmp_path):
     path = tmp_path / "state.json"
     s = State(str(path))

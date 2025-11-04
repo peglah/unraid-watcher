@@ -6,6 +6,7 @@ import signal
 from datetime import datetime, timedelta
 from dateutil import parser as dateparser
 import os
+from typing import Optional
 
 from .feed import parse_feed_from_url, latest_stable_entry
 from .state import State
@@ -13,10 +14,14 @@ from .notifier import send_apprise_notification
 from .web import run_app
 
 logger = logging.getLogger("unraid-watcher")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s"
+)
 
 DEFAULT_FEED = "https://forums.unraid.net/forums/forum/7-announcements.xml"
 DEFAULT_POLL = "1h"
+
 
 def parse_interval(s: str) -> int:
     s = s.strip().lower()
@@ -35,7 +40,8 @@ def parse_interval(s: str) -> int:
         return val * 30 * 86400
     raise ValueError("unsupported unit")
 
-def try_fetch(url, retries=3):
+
+def try_fetch(url: str, retries: int = 3):
     delay = 1
     for attempt in range(1, retries + 1):
         try:
@@ -46,7 +52,13 @@ def try_fetch(url, retries=3):
             delay *= 2
     raise RuntimeError("failed to fetch feed after retries")
 
-def should_send_reminder(last_published_iso, reminder_sent_for, last_id, delay_days=30):
+
+def should_send_reminder(
+    last_published_iso: Optional[str],
+    reminder_sent_for: Optional[str],
+    last_id: Optional[str],
+    delay_days: int = 30
+) -> bool:
     if not last_published_iso:
         return False
     try:
@@ -58,17 +70,26 @@ def should_send_reminder(last_published_iso, reminder_sent_for, last_id, delay_d
         return reminder_sent_for != last_id
     return False
 
+
 def main_loop(feed_url, state_path, apprise_cfg, poll_seconds, simulate=False):
     state = State(state_path)
     run_app()
 
     if simulate:
-        send_apprise_notification(apprise_cfg, "Unraid Watcher: test", "This is a simulated test notification.")
+        send_apprise_notification(
+            apprise_cfg,
+            "Unraid Watcher: test",
+            "This is a simulated test notification."
+        )
         logger.info("Simulate mode: sent test notification; exiting.")
         return
 
-    logger.info("Starting poll loop: feed=%s interval=%ss state=%s", feed_url, poll_seconds, state_path)
+    logger.info(
+        "Starting poll loop: feed=%s interval=%ss state=%s",
+        feed_url, poll_seconds, state_path
+    )
     stop = False
+
     def _sig(signum, frame):
         nonlocal stop
         logger.info("Received signal %s, stopping...", signum)
@@ -92,27 +113,46 @@ def main_loop(feed_url, state_path, apprise_cfg, poll_seconds, simulate=False):
 
                 if latest_id != last_id:
                     title = f"Unraid stable release: {latest.get('title')}"
-                    body = f"{latest.get('title')}\n\n{latest.get('link')}\n\nPublished: {latest_pub_iso}"
-                    send_apprise_notification(apprise_cfg, title, body)
-                    state.set_last_stable(latest_id, latest_pub_iso)
-                    logger.info("New stable release announced: %s", latest.get('title'))
-                elif should_send_reminder(
-                        last_pub_iso,
-                        reminder_sent_for,
-                        last_id,
-                        delay_days=float(os.environ.get("REMINDER_DELAY_DAYS", "30"))
-                    ):
-                    delay_days = float(os.environ.get("REMINDER_DELAY_DAYS", "30"))
-
-                    title = f"Unraid update reminder: {delay_days:g} day{'s' if delay_days != 1 else ''} since last stable release"
                     body = (
-                        f"It's been {delay_days:g} day{'s' if delay_days != 1 else ''} since the last "
-                        f"stable Unraid release ({last_pub_iso}). Consider planning your OS update.\n\n"
+                        f"{latest.get('title')}\n\n"
+                        f"{latest.get('link')}\n\n"
+                        f"Published: {latest_pub_iso}"
+                    )
+                    send_apprise_notification(apprise_cfg, title, body)
+                    if latest_id and latest_pub_iso:
+                        state.set_last_stable(latest_id, latest_pub_iso)
+                    logger.info(
+                        "New stable release announced: %s",
+                        latest.get('title')
+                    )
+                elif should_send_reminder(
+                    last_pub_iso,
+                    reminder_sent_for,
+                    last_id,
+                    delay_days=int(float(
+                        os.environ.get("REMINDER_DELAY_DAYS", "30")
+                    ))
+                ):
+                    delay_days = int(float(
+                        os.environ.get("REMINDER_DELAY_DAYS", "30")
+                    ))
+
+                    title = (
+                        f"Unraid update reminder: {delay_days:g} day"
+                        f"{'s' if delay_days != 1 else ''} since last stable "
+                        f"release"
+                    )
+                    body = (
+                        f"It's been {delay_days:g} day"
+                        f"{'s' if delay_days != 1 else ''} since the last "
+                        f"stable Unraid release ({last_pub_iso}). "
+                        f"Consider planning your OS update.\n\n"
                         f"Link: {latest.get('link')}"
                     )
 
                     send_apprise_notification(apprise_cfg, title, body)
-                    state.set_reminder_sent(last_id)
+                    if last_id:
+                        state.set_reminder_sent(last_id)
                     logger.info("30-day reminder sent for release %s", last_id)
         except Exception:
             logger.exception("Error in poll loop iteration")
@@ -121,11 +161,18 @@ def main_loop(feed_url, state_path, apprise_cfg, poll_seconds, simulate=False):
                 break
             time.sleep(1)
 
+
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--feed", default=os.environ.get("FEED_URL", DEFAULT_FEED))
-    p.add_argument("--state", default=os.environ.get("STATE_FILE", "/data/state.json"))
-    p.add_argument("--apprise", default=os.environ.get("APPRISE_URLS", "mailto://you@example.org"))
+    p.add_argument(
+        "--state",
+        default=os.environ.get("STATE_FILE", "/data/state.json")
+    )
+    p.add_argument(
+        "--apprise",
+        default=os.environ.get("APPRISE_URLS", "mailto://you@example.org")
+    )
     p.add_argument("--poll", default=os.environ.get("POLL", DEFAULT_POLL))
     p.add_argument("--simulate", action="store_true")
     args = p.parse_args()
@@ -135,4 +182,7 @@ if __name__ == "__main__":
 
     apprise_cfg = [u for u in args.apprise.split(",") if u.strip()]
     poll_seconds = parse_interval(args.poll)
-    main_loop(args.feed, args.state, apprise_cfg, poll_seconds, simulate=simulate_flag)
+    main_loop(
+        args.feed, args.state, apprise_cfg, poll_seconds,
+        simulate=simulate_flag
+    )
